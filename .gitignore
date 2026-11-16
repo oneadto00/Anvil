@@ -1,0 +1,31 @@
+# Rust build artifacts
+/target
+**/*.rs.bk
+Cargo.lock
+
+# macOS / OS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE / Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Anvil local runtime & data directories
+.anvil-data/
+.anvil/
+*.lock.json
+*.log
+
+# Local secret / env overrides
+.env
+.env.*
+!.env.example
+
+# Local-only AI agent rules & architecture documentation (never push to remote)
+/AGENTS.md
+/CLAUDE.md
+/docs/
