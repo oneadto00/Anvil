@@ -1518,3 +1518,55 @@ async fn shutdown_cancels_pending_probe_before_its_stop_layer() {
     task.await.unwrap().unwrap();
     assert!(rx.recv().await.is_none());
 }
+
+#[tokio::test]
+async fn resolve_port_conflict_ignores_non_conflicting_services_and_retries_conflict() {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (actor, mut ch, mut rx) = configured(&format!(
+        "  db:\n    runtime: {{type: native, cmd: db}}\n    port: {port}"
+    ));
+    let task = tokio::spawn(actor.run());
+
+    // Resolving a conflict while Idle is a complete no-op.
+    ch.snapshots.borrow_and_update();
+    command(&ch, EngineCommand::ResolvePortConflict("db".into())).await;
+    drop(
+        ch.commands
+            .reserve_many(ch.commands.max_capacity())
+            .await
+            .unwrap(),
+    );
+    assert!(!ch.snapshots.has_changed().unwrap());
+
+    command(&ch, EngineCommand::StartWorkspace).await;
+    state(&mut ch, "db", "PortConflict").await;
+    assert!(rx.try_recv().is_err());
+
+    // Safe self-PID guard keeps the test runner alive and re-reports the conflict.
+    command(&ch, EngineCommand::ResolvePortConflict("db".into())).await;
+    ch.snapshots.changed().await.unwrap();
+    state(&mut ch, "db", "PortConflict").await;
+    assert!(rx.try_recv().is_err());
+
+    drop(listener);
+    let mut spawn = None;
+    for _ in 0..10 {
+        command(&ch, EngineCommand::ResolvePortConflict("db".into())).await;
+        tokio::select! {
+            next = Spawn::next(&mut rx) => {
+                spawn = Some(next);
+                break;
+            }
+            changed = ch.snapshots.changed() => {
+                changed.unwrap();
+                let _ = ch.snapshots.borrow_and_update();
+            }
+        }
+    }
+    let exit = spawn.expect("service should start once port is free").created();
+    state(&mut ch, "db", "Healthy").await;
+    finished(exit);
+    drop(ch.commands);
+    task.await.unwrap().unwrap();
+}

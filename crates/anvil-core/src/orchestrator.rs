@@ -19,7 +19,7 @@ use tokio::{
 };
 
 /// Downstream control messages for a workspace.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineCommand {
     /// Schedule all services, beginning with the independent roots.
     StartWorkspace,
@@ -29,6 +29,8 @@ pub enum EngineCommand {
     Stop(ServiceId),
     /// Replace only this service, coalescing requests until its replacement is ready.
     Restart(ServiceId),
+    /// Terminate the external process occupying this service's port and retry startup.
+    ResolvePortConflict(ServiceId),
     /// Close admission and stop any instances created by this actor.
     Shutdown,
 }
@@ -273,6 +275,7 @@ impl Orchestrator {
                     Some(EngineCommand::Start(id)) => self.start(id),
                     Some(EngineCommand::Restart(id)) => self.manual(id, ManualAction::Restart),
                     Some(EngineCommand::Stop(id)) => self.manual(id, ManualAction::Stop),
+                    Some(EngineCommand::ResolvePortConflict(id)) => self.resolve_port_conflict(id),
                     Some(EngineCommand::Shutdown) | None => {
                         commands_open = command.is_some();
                         closing = true;
@@ -540,7 +543,11 @@ impl Orchestrator {
 
     fn admit(&mut self, id: ServiceId) {
         let Some(state) = self.state(&id) else { return };
-        if self.services[&id].retry_cancel.is_some() {
+        if self
+            .services
+            .get(&id)
+            .is_some_and(|s| s.retry_cancel.is_some())
+        {
             return;
         }
         if state.is_active()
@@ -554,27 +561,67 @@ impl Orchestrator {
         if self.wait_for_dependencies(&id) {
             return;
         }
-        let Some(control) = self.services.get_mut(&id) else {
+        let Some(launch) = self.next_launch(id) else {
             return;
         };
-        let Some(generation) = control.generation.checked_add(1) else {
-            return;
-        };
-        control.generation = generation;
-        let port = self.config.services[&id].port;
-        let launch = Launch { id, generation };
-        if let Some(port) = port {
-            self.transition(&launch.id, ServiceState::PortCheck);
-            self.tasks.spawn(async move {
-                let result = tokio::task::spawn_blocking(move || check_port(port))
-                    .await
-                    .map_err(|_| ExecutionError::Task)
-                    .and_then(|result| result);
-                Completion::PortChecked(launch, result)
-            });
+        if let Some(port) = self
+            .config
+            .services
+            .get(&launch.id)
+            .and_then(|svc| svc.port)
+        {
+            self.check_port_for_launch(launch, port, None);
         } else {
             self.start_instance(launch);
         }
+    }
+
+    fn resolve_port_conflict(&mut self, id: ServiceId) {
+        let Some(ServiceState::PortConflict(occupant)) = self.state(&id) else {
+            return;
+        };
+        if self
+            .services
+            .get(&id)
+            .is_some_and(|s| s.retry_cancel.is_some())
+            || self.wait_for_dependencies(&id)
+        {
+            return;
+        }
+        let Some(launch) = self.next_launch(id) else {
+            return;
+        };
+        let port = self
+            .config
+            .services
+            .get(&launch.id)
+            .and_then(|svc| svc.port)
+            .unwrap_or(occupant.port);
+        self.check_port_for_launch(launch, port, Some(occupant.pid));
+    }
+
+    fn next_launch(&mut self, id: ServiceId) -> Option<Launch> {
+        let control = self.services.get_mut(&id)?;
+        let generation = control.generation.checked_add(1)?;
+        control.generation = generation;
+        Some(Launch { id, generation })
+    }
+
+    fn check_port_for_launch(&mut self, launch: Launch, port: u16, kill_pid: Option<u32>) {
+        self.transition(&launch.id, ServiceState::PortCheck);
+        self.tasks.spawn(async move {
+            let result = tokio::task::spawn_blocking(move || {
+                if let Some(pid) = kill_pid.filter(|&pid| pid > 0 && pid != std::process::id()) {
+                    anvil_sys::kill_port_occupant(pid, Duration::from_secs(3))
+                        .map_err(|_| ExecutionError::Stop)?;
+                }
+                check_port(port)
+            })
+            .await
+            .map_err(|_| ExecutionError::Task)
+            .and_then(|result| result);
+            Completion::PortChecked(launch, result)
+        });
     }
 
     fn port_checked(
@@ -596,8 +643,12 @@ impl Orchestrator {
                 }
                 self.transition(&launch.id, ServiceState::PortConflict(occupant));
             }
-            Err(_) => {
-                self.transition(&launch.id, crashed(None, None, "port inspection failed"));
+            Err(err) => {
+                let reason = match err {
+                    ExecutionError::Stop => "failed to terminate port occupant",
+                    _ => "port inspection failed",
+                };
+                self.transition(&launch.id, crashed(None, None, reason));
                 self.schedule_retry(launch);
             }
         }
