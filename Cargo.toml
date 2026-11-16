@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/anvil-cli",
+    "crates/anvil-core",
+    "crates/anvil-runtime",
+    "crates/anvil-sys",
+    "crates/anvil-secret",
+    "crates/anvil-tui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Internal workspace crates
+anvil-sys = { path = "crates/anvil-sys" }
+anvil-secret = { path = "crates/anvil-secret" }
+anvil-core = { path = "crates/anvil-core" }
+anvil-runtime = { path = "crates/anvil-runtime" }
+anvil-tui = { path = "crates/anvil-tui" }
+
+# Shared external dependencies
+thiserror = "2.0"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tokio = { version = "1.40", features = ["full"] }
+regex = "1.10"
+zeroize = { version = "1.8", features = ["derive", "serde"] }
+aes-gcm = "0.10"
+argon2 = "0.5"
+keyring = "3.6"
+rand = "0.8"
+base64 = "0.22"
+dirs = "5.0"
+chrono = { version = "0.4", features = ["serde"] }
+tempfile = "3.12"

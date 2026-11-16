@@ -1,0 +1,17 @@
+[package]
+name = "anvil-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anvil-sys = { workspace = true }
+anvil-secret = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+regex = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
