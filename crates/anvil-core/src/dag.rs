@@ -180,6 +180,25 @@ impl DagSchedulerState {
         root_services_iter(&self.dependencies).collect()
     }
 
+    /// Direct dependents whose waiting snapshot changes when this service changes health.
+    pub(crate) fn dependents_of(&self, id: &str) -> &[ServiceId] {
+        self.dependents.get(id).map(Vec::as_slice).unwrap_or_default()
+    }
+
+    /// Rearm dependency checks after one instance exits. Running descendants
+    /// retain their own health until their own lifecycle event arrives.
+    pub(crate) fn mark_exited(&mut self, id: &str) {
+        self.healthy.remove(id);
+        self.unlocked.remove(id);
+        if let Some(children) = self.dependents.get(id) {
+            for child in children {
+                if !self.healthy.contains(child) {
+                    self.unlocked.remove(child);
+                }
+            }
+        }
+    }
+
     /// Marks `id` as healthy and returns only the downstream services whose remaining
     /// unsatisfied upstream dependencies just dropped to `0`.
     ///
