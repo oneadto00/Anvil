@@ -5,8 +5,8 @@ use crate::process_tree::{query_process_metadata, ManagedProcessHandle, ProcessS
 use nix::errno::Errno;
 use nix::sys::signal::{kill, killpg, Signal};
 use nix::unistd::{getpgid, Pid};
-use std::os::unix::process::CommandExt;
-use std::process::{Child, Command};
+use std::os::unix::process::{CommandExt, ExitStatusExt};
+use std::process::{Child, Command, ExitStatus};
 use std::thread;
 use std::time::{Duration, Instant};
 use sysinfo::{Pid as SysPid, ProcessRefreshKind, ProcessStatus, System};
@@ -17,17 +17,31 @@ pub(crate) struct PlatformProcessHandle {
     pub(crate) pgid: u32,
 }
 
-pub(crate) fn prepare_command(cmd: &mut Command) -> Result<(), SysError> {
+pub(crate) fn shell_command(cmd_line: &str) -> Command {
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", cmd_line]);
+    cmd
+}
+
+pub(crate) fn exit_signal(status: &ExitStatus) -> Option<i32> {
+    status.signal()
+}
+
+pub(crate) fn prepare_command(cmd: &mut Command) {
     // Setting `process_group(0)` places the child in a new process group whose
     // PGID equals its PID without requiring an `unsafe` `pre_exec` hook.
     cmd.process_group(0);
-    Ok(())
 }
 
 pub(crate) fn attach_child(
     child: &Child,
 ) -> Result<(ManagedProcessHandle, ProcessSpawnIdentity), SysError> {
-    let pid = child.id();
+    attach_pid(child.id())
+}
+
+pub(crate) fn attach_pid(
+    pid: u32,
+) -> Result<(ManagedProcessHandle, ProcessSpawnIdentity), SysError> {
     let raw_pid = i32::try_from(pid).map_err(|_| {
         SysError::ProcessGroupSetup(format!("spawned child PID {pid} overflows i32"))
     })?;

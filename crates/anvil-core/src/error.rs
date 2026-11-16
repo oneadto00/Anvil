@@ -22,6 +22,10 @@ pub enum CoreError {
     #[error(transparent)]
     DagCycle(#[from] DagCycleError),
 
+    /// A readiness probe could not run or lost its required input.
+    #[error("readiness probe failed: {reason}")]
+    ProbeFailed { reason: String },
+
     /// Underlying secret backend or placeholder resolution error.
     #[error("secret error: {0}")]
     Secret(#[from] anvil_secret::SecretError),

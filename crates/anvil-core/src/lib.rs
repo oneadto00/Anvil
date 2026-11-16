@@ -5,6 +5,7 @@
 pub mod config;
 pub mod dag;
 pub mod error;
+pub mod probe;
 pub mod state;
 
 pub use config::{

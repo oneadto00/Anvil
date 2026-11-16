@@ -6,7 +6,7 @@ use std::ffi::c_void;
 use std::mem::size_of;
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::CommandExt;
-use std::process::{Child, Command};
+use std::process::{Child, Command, ExitStatus};
 use std::time::Duration;
 use windows_sys::Win32::Foundation::{
     CloseHandle, GetLastError, ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER, FALSE, HANDLE,
@@ -19,7 +19,7 @@ use windows_sys::Win32::System::JobObjects::{
 };
 use windows_sys::Win32::System::Threading::{
     GetExitCodeProcess, OpenProcess, TerminateProcess, CREATE_NEW_PROCESS_GROUP,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
 };
 
 /// RAII wrapper around an owned Win32 Job Object kernel `HANDLE`.
@@ -80,16 +80,53 @@ pub(crate) struct PlatformProcessHandle {
     pub(crate) job: JobObjectHandle,
 }
 
-pub(crate) fn prepare_command(cmd: &mut Command) -> Result<(), SysError> {
+pub(crate) fn shell_command(cmd_line: &str) -> Command {
+    let mut cmd = Command::new("cmd");
+    // /S strips the enclosing quotes, preserving the caller's shell syntax verbatim.
+    cmd.args(["/D", "/S", "/C"])
+        .raw_arg(format!(r#""{cmd_line}""#));
+    cmd
+}
+
+pub(crate) fn exit_signal(_: &ExitStatus) -> Option<i32> {
+    None
+}
+
+pub(crate) fn prepare_command(cmd: &mut Command) {
     cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
-    Ok(())
 }
 
 pub(crate) fn attach_child(
     child: &Child,
 ) -> Result<(ManagedProcessHandle, ProcessSpawnIdentity), SysError> {
-    let pid = child.id();
+    attach_to_job(child.id(), child.as_raw_handle() as HANDLE)
+}
 
+pub(crate) fn attach_pid(
+    pid: u32,
+) -> Result<(ManagedProcessHandle, ProcessSpawnIdentity), SysError> {
+    // SAFETY: OpenProcess takes a PID and access flags. The owned handle is closed by RAII.
+    let raw = unsafe {
+        OpenProcess(
+            PROCESS_SET_QUOTA | PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
+            FALSE,
+            pid,
+        )
+    };
+    if raw == 0 || raw == INVALID_HANDLE_VALUE {
+        return Err(SysError::JobObjectError(format!(
+            "OpenProcess failed for pid {pid}: {}",
+            last_os_error()
+        )));
+    }
+    let process = OwnedProcessHandle(raw);
+    attach_to_job(pid, process.as_raw())
+}
+
+fn attach_to_job(
+    pid: u32,
+    child_handle: HANDLE,
+) -> Result<(ManagedProcessHandle, ProcessSpawnIdentity), SysError> {
     // SAFETY: Passing null security attributes and null name creates a private anonymous
     // Win32 Job Object; the returned handle is checked before being wrapped in `JobObjectHandle`.
     let raw_job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
@@ -126,15 +163,21 @@ pub(crate) fn attach_child(
         )));
     }
 
-    let child_handle = child.as_raw_handle() as HANDLE;
     // SAFETY: `job.as_raw()` is an active Job Object and `child_handle` is borrowed from
-    // `child` for the duration of this synchronous call.
+    // the caller for the duration of this synchronous call.
     let assign_ok = unsafe { AssignProcessToJobObject(job.as_raw(), child_handle) };
     if assign_ok == FALSE {
-        return Err(SysError::JobObjectError(format!(
-            "AssignProcessToJobObject failed for pid {pid}: {}",
-            last_os_error()
-        )));
+        let error = last_os_error();
+        // A fast command can exit before attachment. Its retained process handle
+        // still identifies the original child and the waiter can collect its status.
+        let mut code = 0;
+        // SAFETY: The borrowed handle has query access and code is a writable DWORD.
+        let queried = unsafe { GetExitCodeProcess(child_handle, &mut code) };
+        if queried == FALSE || code == STILL_ACTIVE as u32 {
+            return Err(SysError::JobObjectError(format!(
+                "AssignProcessToJobObject failed for pid {pid}: {error}"
+            )));
+        }
     }
 
     let (start_time_secs, exe_name) = query_process_metadata(pid);
@@ -199,7 +242,10 @@ pub(crate) fn terminate_process_tree(
         }
         return Err(SysError::TerminationFailed {
             pid,
-            reason: format!("OpenProcess failed: {}", std::io::Error::from_raw_os_error(code as i32)),
+            reason: format!(
+                "OpenProcess failed: {}",
+                std::io::Error::from_raw_os_error(code as i32)
+            ),
         });
     }
     let proc_handle = OwnedProcessHandle(raw_proc);

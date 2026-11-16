@@ -11,7 +11,8 @@ use self::unix as imp;
 use self::windows as imp;
 
 use crate::error::SysError;
-use std::process::{Child, Command};
+use std::path::Path;
+use std::process::{Child, Command, ExitStatus};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, ProcessRefreshKind, System, UpdateKind};
 
@@ -26,6 +27,18 @@ pub struct ProcessSpawnIdentity {
     pub start_time_secs: u64,
     /// Executable file name (or process name fallback) reported by the OS.
     pub exe_name: String,
+}
+
+impl ProcessSpawnIdentity {
+    /// Checks the live PID's kernel start timestamp before using a recorded identity.
+    pub fn matches_start_time(pid: u32, expected: u64) -> bool {
+        let mut system = System::new();
+        let pid = Pid::from_u32(pid);
+        system.refresh_process_specifics(pid, ProcessRefreshKind::new());
+        system
+            .process(pid)
+            .is_some_and(|process| process.start_time() == expected)
+    }
 }
 
 /// Safe RAII handle representing ownership over an isolated OS process tree.
@@ -49,6 +62,21 @@ impl ManagedProcessHandle {
     }
 }
 
+/// Builds a command line for the platform shell in an isolated process tree.
+pub fn build_shell_command(cmd_line: &str, cwd: Option<&Path>) -> Command {
+    let mut cmd = imp::shell_command(cmd_line);
+    if let Some(cwd) = cwd {
+        cmd.current_dir(cwd);
+    }
+    imp::prepare_command(&mut cmd);
+    cmd
+}
+
+/// Returns the exit code and, on Unix, the terminating signal.
+pub fn extract_exit_status(status: &ExitStatus) -> (Option<i32>, Option<i32>) {
+    (status.code(), imp::exit_signal(status))
+}
+
 /// Safe cross-platform abstraction for process-tree isolation and teardown.
 pub trait ProcessController: Send + Sync {
     /// Configures `cmd` prior to spawning so the child executes in an isolated process tree.
@@ -60,6 +88,14 @@ pub trait ProcessController: Send + Sync {
         &self,
         child: &Child,
     ) -> Result<(ManagedProcessHandle, ProcessSpawnIdentity), SysError>;
+
+    /// Attaches a freshly spawned, isolated child by PID while its owner retains the child.
+    fn attach_pid(
+        &self,
+        pid: u32,
+    ) -> Result<(ManagedProcessHandle, ProcessSpawnIdentity), SysError> {
+        imp::attach_pid(pid)
+    }
 
     /// Terminates the process tree owned by `handle` using a graceful-then-forceful strategy.
     fn terminate_handle(
@@ -93,7 +129,8 @@ impl DefaultProcessController {
 
 impl ProcessController for DefaultProcessController {
     fn prepare_command(&self, cmd: &mut Command) -> Result<(), SysError> {
-        imp::prepare_command(cmd)
+        imp::prepare_command(cmd);
+        Ok(())
     }
 
     fn attach_child(
