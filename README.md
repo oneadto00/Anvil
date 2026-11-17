@@ -205,6 +205,16 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo check -p anvil-sys --target x86_64-pc-windows-gnu
 ```
 
+### License
+
+Anvil's original code is licensed under the **Apache License, Version 2.0**
+(`Apache-2.0`). See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Third-party components retain their own licenses. The dependency inventory,
+license texts, source locations, and redistribution requirements are recorded in
+[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt). Include these notices with
+redistributed binaries, and review them again whenever dependencies change.
+
 ---
 
 <a id="简体中文"></a>
@@ -401,3 +411,12 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo check -p anvil-sys --target x86_64-pc-windows-gnu
 ```
+
+### 开源许可
+
+Anvil 的原创代码采用 **Apache License, Version 2.0**（`Apache-2.0`），详见
+[LICENSE](LICENSE) 和 [NOTICE](NOTICE)。
+
+第三方组件仍受各自许可证约束。依赖版本、许可正文、源码获取地址与分发要求见
+[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)。分发二进制时应随附这些声明，
+更新依赖后应重新核查。
