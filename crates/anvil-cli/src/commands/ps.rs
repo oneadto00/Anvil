@@ -704,7 +704,6 @@ services:
 
         let controller = DefaultProcessController::new();
 
-        // Spawn a real long-lived process for live-svc.
         let mut live_cmd = build_shell_command(long_sleep_cmd(), None);
         controller.prepare_command(&mut live_cmd)?;
         let mut live_child = live_cmd.spawn()?;
@@ -712,7 +711,7 @@ services:
         let (live_handle, live_identity) =
             tokio::task::spawn_blocking(move || controller.attach_pid(live_pid)).await??;
 
-        // Spawn and exit a short-lived process so we get a guaranteed dead PID.
+        // Wait for the short-lived process before testing its stale lock record.
         let dead_cmd_line = if std::env::consts::OS == "windows" {
             "exit /b 0"
         } else {
@@ -806,7 +805,6 @@ services:
         assert_eq!(by_name["reused-exe-svc"].status, ServicePsStatus::PidReused);
         assert_eq!(by_name["idle-svc"].status, ServicePsStatus::Stopped);
 
-        // Verify JSON serialization round-trips cleanly.
         let encoded = serde_json::to_string(&report)?;
         let decoded: serde_json::Value = serde_json::from_str(&encoded)?;
         assert_eq!(decoded["project"], "ps-test");

@@ -340,7 +340,7 @@ impl TuiApp {
     }
 
     fn sync_port_conflicts(&mut self) {
-        // End any conflict cycle whose service disappeared, left PortConflict, or changed occupant.
+        // Keep dismissed conflicts suppressed only while the same occupant holds the port.
         self.seen_port_conflicts.retain(|id, seen_occupant| {
             matches!(
                 self.snapshot.services.get(id).map(|service| &service.state),
@@ -867,7 +867,6 @@ mod tests {
             assert!(frame0.contains("Topology [FOCUS]"));
             assert!(frame0.contains("> db"));
 
-            // Seed logs for both services before driving navigation and search.
             harness
                 .log_tx
                 .send(LogBatch {
@@ -892,7 +891,6 @@ mod tests {
                 .wait_for_frame("seeded db logs", |f| f.contains("Logs db [FOLLOW] 3/3"))
                 .await;
 
-            // j -> select api
             harness.send_key(KeyCode::Char('j')).await;
             let after_j = harness
                 .wait_for_frame("select api", |f| {
@@ -901,7 +899,6 @@ mod tests {
                 .await;
             assert!(after_j.contains("api starting"), "{after_j}");
 
-            // k -> select back to db
             harness.send_key(KeyCode::Char('k')).await;
             harness
                 .wait_for_frame("select db", |f| {
@@ -909,13 +906,11 @@ mod tests {
                 })
                 .await;
 
-            // Tab -> switch focus to Logs pane
             harness.send_key(KeyCode::Tab).await;
             harness
                 .wait_for_frame("focus logs", |f| !f.contains("Topology [FOCUS]"))
                 .await;
 
-            // '/' + "error" + Enter -> filter db logs and retain filter after ConfirmSearch
             harness.send_key(KeyCode::Char('/')).await;
             for ch in ['e', 'r', 'r', 'o', 'r'] {
                 harness.send_key(KeyCode::Char(ch)).await;
@@ -936,13 +931,11 @@ mod tests {
                 .await;
             assert!(confirmed.contains("db error line"), "{confirmed}");
 
-            // s -> toggle scroll lock ([FOLLOW] -> [LOCKED])
             harness.send_key(KeyCode::Char('s')).await;
             harness
                 .wait_for_frame("scroll locked", |f| f.contains("Logs db [LOCKED] 1/3"))
                 .await;
 
-            // r -> restart currently selected service ("db")
             harness.send_key(KeyCode::Char('r')).await;
             let cmd1 = tokio::time::timeout(Duration::from_secs(1), harness.cmd_rx.recv())
                 .await
@@ -950,7 +943,6 @@ mod tests {
                 .unwrap();
             assert_eq!(cmd1, EngineCommand::Restart("db".into()));
 
-            // Snapshot enters PortConflict for "api" -> modal pops up automatically
             let mut next_snap = snapshot();
             next_snap.services.get_mut("api").unwrap().state =
                 ServiceState::PortConflict(occupant(8080, 999));
@@ -966,7 +958,7 @@ mod tests {
                 "{modal_frame}"
             );
 
-            // k inside PortConflict modal -> emits ResolvePortConflict("api") and closes modal
+            // The modal targets api even though db is selected.
             harness.send_key(KeyCode::Char('k')).await;
             let cmd2 = tokio::time::timeout(Duration::from_secs(1), harness.cmd_rx.recv())
                 .await
@@ -979,7 +971,6 @@ mod tests {
                 })
                 .await;
 
-            // q -> emits Shutdown and exits cleanly
             harness.send_key(KeyCode::Char('q')).await;
             let cmd3 = tokio::time::timeout(Duration::from_secs(1), harness.cmd_rx.recv())
                 .await
@@ -1005,7 +996,6 @@ mod tests {
             .wait_for_frame("initial conflict modal", |f| f.contains("Port Conflict"))
             .await;
 
-        // Dismiss modal with Esc.
         harness.send_key(KeyCode::Esc).await;
         harness
             .wait_for_frame("modal dismissed", |f| !f.contains("Port Conflict"))
@@ -1045,7 +1035,6 @@ mod tests {
         let mut harness = Harness::spawn(140, 40, snapshot());
         harness.wait_for_draw_at_least(1).await;
 
-        // Deliver 6,000 log lines across 6,000 individual batches for "db".
         let log_tx = harness.log_tx.clone();
         let producer = tokio::spawn(async move {
             for index in 0..6_000 {
@@ -1135,7 +1124,6 @@ mod tests {
         app.apply_action(TuiAction::ScrollBottom);
         assert!(app.logs_for("db").unwrap().scroll_locked);
 
-        // Snapshot update removes selected service -> falls back to first; CrashDetail opens on Enter.
         app.apply_action(TuiAction::ToggleFocus);
         app.apply_action(TuiAction::SelectNext);
         assert_eq!(app.selected_service(), Some("api"));
@@ -1160,7 +1148,6 @@ mod tests {
         app.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(app.modal(), &ModalKind::None);
 
-        // Channel closure propagation: SnapshotChannelClosed and EventStreamClosed.
         let harness = Harness::spawn(80, 24, snapshot());
         drop(harness.snap_tx);
         let err = harness.task.await.unwrap().unwrap_err();

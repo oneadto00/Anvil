@@ -123,8 +123,7 @@ fn render_modal(
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(2)])
         .areas(inner);
-    // Allocate each field its own clipped rectangle: a huge command or reason cannot
-    // hide later fields or overwrite the action hints. Paragraph wraps within it.
+    // Clip each field to its own area so long details leave room for action hints.
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints(

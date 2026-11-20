@@ -337,7 +337,6 @@ mod tests {
 
         let env_1: VaultEnvelope = serde_json::from_str(&on_disk_1).unwrap();
 
-        // Update with another key -> must rotate nonce and salt
         vault
             .set("nebula", "JWT_KEY", Zeroizing::new("jwt_999".to_string()))
             .unwrap();
@@ -346,7 +345,6 @@ mod tests {
         assert_ne!(env_1.nonce_b64, env_2.nonce_b64);
         assert_ne!(env_1.salt_b64, env_2.salt_b64);
 
-        // Re-open from disk with a new vault instance
         let reopened = LocalEncryptedVault::with_dir(dir.path(), passphrase);
         assert_eq!(
             reopened

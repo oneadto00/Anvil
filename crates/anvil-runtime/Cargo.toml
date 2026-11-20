@@ -15,7 +15,7 @@ async-trait = { workspace = true }
 chrono = { workspace = true }
 bollard = { workspace = true }
 futures-util = { workspace = true }
-# Bollard 0.18 logs unredacted create and inspect bodies at Debug and Trace.
+# Cap logging at Info because Bollard 0.18 can expose environment values at Debug and Trace.
 log = { workspace = true, features = ["max_level_info"] }
 zeroize = { workspace = true }
 

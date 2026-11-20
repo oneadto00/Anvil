@@ -1,8 +1,7 @@
-//! CLI subcommand routing and dispatch skeleton.
+//! Dispatches parsed CLI subcommands to their handlers.
 
 use crate::args::{Cli, Command, GlobalOptions};
 
-// === PHASE2_MOD_DECLS ===
 #[path = "../runtime_bridge.rs"]
 pub mod runtime_bridge;
 pub mod down;
@@ -11,42 +10,26 @@ pub mod logs;
 pub mod ps;
 pub mod secret;
 pub mod up;
-// === END_PHASE2_MOD_DECLS ===
-
-// === PHASE2_EXTRA_USES ===
-// === END_PHASE2_EXTRA_USES ===
 
 /// Dispatches parsed CLI arguments to the selected subcommand implementation.
 pub async fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let globals = GlobalOptions::from(&cli);
 
     match cli.command {
-        // [ARM:UP]
         Command::Up {
             detach,
             no_tui,
             daemon_child,
         } => up::execute(&globals, detach, no_tui, daemon_child).await,
-        // [/ARM:UP]
-        // [ARM:DOWN]
         Command::Down { grace_ms } => down::execute(globals, grace_ms).await,
-        // [/ARM:DOWN]
-        // [ARM:PS]
         Command::Ps { json } => ps::execute(globals, json).await,
-        // [/ARM:PS]
-        // [ARM:LOGS]
         Command::Logs {
             service,
             follow,
             tail,
         } => logs::execute(globals, service, follow, tail).await,
-        // [/ARM:LOGS]
-        // [ARM:SECRET]
         Command::Secret { action } => secret::run(&globals, action).await,
-        // [/ARM:SECRET]
-        // [ARM:DOCTOR]
         Command::Doctor { reap } => doctor::run(&globals, reap).await,
-        // [/ARM:DOCTOR]
     }
 }
 

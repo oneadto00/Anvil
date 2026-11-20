@@ -1528,7 +1528,6 @@ async fn resolve_port_conflict_ignores_non_conflicting_services_and_retries_conf
     ));
     let task = tokio::spawn(actor.run());
 
-    // Resolving a conflict while Idle is a complete no-op.
     ch.snapshots.borrow_and_update();
     command(&ch, EngineCommand::ResolvePortConflict("db".into())).await;
     drop(

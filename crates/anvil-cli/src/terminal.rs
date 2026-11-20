@@ -16,7 +16,7 @@ static SHUTDOWN_BUS: OnceLock<Result<ShutdownSignal, String>> = OnceLock::new();
 
 /// Errors returned while configuring terminal UI mode or OS signal listeners.
 #[derive(Debug, thiserror::Error)]
-#[allow(dead_code)] // Constructed by Phase 2 subcommands entering TUI or signal loops.
+#[allow(dead_code)]
 pub enum TerminalError {
     /// Failed to switch the terminal into raw mode or enter the alternate screen.
     #[error("failed to initialize terminal UI mode: {0}")]
@@ -30,7 +30,7 @@ pub enum TerminalError {
 /// RAII guard that switches the terminal into raw alternate-screen mode on construction
 /// and idempotently restores normal terminal state when dropped.
 #[derive(Debug)]
-#[allow(dead_code)] // Constructed by Phase 2 `up` TUI command.
+#[allow(dead_code)]
 pub struct TerminalGuard {
     active: bool,
 }
@@ -40,7 +40,7 @@ impl TerminalGuard {
     ///
     /// If entering the alternate screen fails after raw mode was enabled, terminal
     /// state is restored best-effort before returning the error.
-    #[allow(dead_code)] // Consumed by Phase 2 `up` TUI command.
+    #[allow(dead_code)]
     pub fn new() -> Result<Self, TerminalError> {
         enable_raw_mode()?;
         let mut guard = Self { active: true };
@@ -101,33 +101,33 @@ pub fn install_panic_hook() {
 
 /// Cross-platform shutdown broadcast bus backed by [`tokio::sync::watch`].
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Consumed by `subscribe_shutdown_signal` and Phase 2 commands.
+#[allow(dead_code)]
 pub struct ShutdownSignal {
     tx: watch::Sender<bool>,
 }
 
 impl ShutdownSignal {
     /// Creates an isolated shutdown signal bus initialized to `false`.
-    #[allow(dead_code)] // Consumed by `subscribe_shutdown_signal` and unit tests.
+    #[allow(dead_code)]
     pub fn new() -> Self {
         let (tx, _rx) = watch::channel(false);
         Self { tx }
     }
 
     /// Returns a receiver that observes `true` once shutdown is triggered.
-    #[allow(dead_code)] // Consumed by `subscribe_shutdown_signal` and unit tests.
+    #[allow(dead_code)]
     pub fn subscribe(&self) -> watch::Receiver<bool> {
         self.tx.subscribe()
     }
 
-    /// Broadcasts shutdown (`true`) to all current and future subscribers.
-    #[allow(dead_code)] // Invoked from the OS signal handler callback.
+    /// Sends shutdown (`true`) while at least one receiver is subscribed.
+    #[allow(dead_code)]
     pub fn trigger(&self) {
         let _ = self.tx.send(true);
     }
 
     /// Returns `true` if shutdown has already been triggered.
-    #[allow(dead_code)] // Utility accessor for callers checking shutdown synchronously.
+    #[allow(dead_code)]
     pub fn is_triggered(&self) -> bool {
         *self.tx.borrow()
     }
@@ -142,7 +142,7 @@ impl Default for ShutdownSignal {
 /// Installs the cross-platform OS termination signal listener (`SIGINT`, `SIGTERM`,
 /// `SIGHUP`, and Windows console control events) once per process and returns a
 /// [`watch::Receiver<bool>`] that transitions to `true` upon termination signal receipt.
-#[allow(dead_code)] // Consumed by Phase 2 async commands (`up`, `logs`, etc.).
+#[allow(dead_code)]
 pub fn subscribe_shutdown_signal() -> Result<watch::Receiver<bool>, TerminalError> {
     let bus = SHUTDOWN_BUS.get_or_init(|| {
         let signal = ShutdownSignal::new();
@@ -162,7 +162,7 @@ pub fn subscribe_shutdown_signal() -> Result<watch::Receiver<bool>, TerminalErro
 }
 
 /// Resolves once `rx` observes `true` (or its corresponding sender is dropped).
-#[allow(dead_code)] // Convenience helper for Phase 2 async commands.
+#[allow(dead_code)]
 pub async fn wait_for_shutdown(rx: &mut watch::Receiver<bool>) {
     let _ = rx.wait_for(|&shutdown| shutdown).await;
 }

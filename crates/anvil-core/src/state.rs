@@ -1,4 +1,4 @@
-//! Service lifecycle state machine, runtime identity, and lock-free workspace snapshots.
+//! Service lifecycle states, runtime identity, and immutable workspace snapshots.
 
 use crate::config::{AnvilConfig, ServiceConfig};
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ pub enum ServiceState {
     },
     /// Checking whether the configured listening port is free prior to startup.
     PortCheck,
-    /// Startup paused because the target listening port is occupied by another process.
+    /// Startup paused because the configured TCP port is occupied.
     PortConflict(PortOccupant),
     /// Spawning the OS process group or starting the Docker container.
     Starting,
@@ -33,7 +33,7 @@ pub enum ServiceState {
         /// Number of probe attempts executed so far.
         attempts: u32,
     },
-    /// Readiness probe succeeded and the service is ready to unlock downstream dependents.
+    /// The service is ready and satisfies its downstream dependents' readiness checks.
     Healthy {
         /// Runtime handle identifying the running native process or Docker container.
         pid_or_cid: RuntimeIdentity,
@@ -60,7 +60,7 @@ pub enum ServiceState {
         signal: Option<i32>,
         /// Human-readable crash summary.
         reason: String,
-        /// Path to the persisted crash snapshot log file.
+        /// Path to the persisted crash report, or an empty string if no report was saved.
         crash_log_path: String,
     },
 }
@@ -134,13 +134,13 @@ pub enum RuntimeIdentity {
 /// Metadata describing an external process occupying a service's configured port.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PortOccupant {
-    /// Conflicting TCP/UDP listening port number.
+    /// Conflicting TCP port.
     pub port: u16,
-    /// Process ID currently holding the port.
+    /// Process ID holding the port, or `0` when attribution fails.
     pub pid: u32,
     /// Executable or process name reported by the OS.
     pub process_name: String,
-    /// Full command line string of the occupying process.
+    /// Command line of the occupying process. The orchestrator redacts it in snapshots.
     pub cmdline: String,
 }
 
@@ -207,7 +207,7 @@ impl WorkspaceSnapshot {
         }
     }
 
-    /// Wraps this snapshot in an [`Arc`] for cheap lock-free sharing over `tokio::sync::watch`.
+    /// Wraps this snapshot in an [`Arc`] for sharing over `tokio::sync::watch`.
     pub fn into_shared(self) -> Arc<Self> {
         Arc::new(self)
     }

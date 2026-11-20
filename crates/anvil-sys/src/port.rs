@@ -24,18 +24,15 @@ pub struct PortOccupantInfo {
 /// Outcome of the two-stage port inspection performed by [`inspect_port`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortCheckResult {
-    /// Both IPv4 and IPv6 loopback bind probes succeeded (or IPv6 is disabled on the host).
+    /// Binding to the available loopback addresses found no conflict.
     Available,
-    /// The port is already in use; `Some(info)` when attribution succeeded, or `None` when
-    /// owned by a privileged/kernel socket whose PID cannot be inspected by the current user.
+    /// The port is in use. Occupant metadata is present when the lookup found a PID.
     Occupied(Option<PortOccupantInfo>),
 }
 
-/// Performs a two-stage check to determine whether `port` is available or occupied.
+/// Checks TCP port availability by binding to IPv4 and IPv6 loopback addresses.
 ///
-/// Stage 1 executes fast loopback bind probes (`127.0.0.1` and `::1`). Only when
-/// `AddrInUse` is encountered does Stage 2 inspect OS socket tables and `sysinfo`
-/// to attribute the owning process.
+/// An `AddrInUse` result triggers an OS socket lookup to identify the occupant.
 pub fn inspect_port(port: u16) -> Result<PortCheckResult, SysError> {
     if port == 0 {
         return Err(SysError::PortBindCheck {
@@ -97,10 +94,10 @@ pub fn inspect_port(port: u16) -> Result<PortCheckResult, SysError> {
     })))
 }
 
-/// Terminates the process occupying a port by `pid` (without signaling its entire process group).
+/// Terminates only the process identified by `pid`.
 ///
-/// Sends a graceful termination signal first, polls up to `grace_period`, and escalates to
-/// forceful termination if the process has not exited.
+/// On Unix, waits up to `grace_period` after `SIGTERM` before sending `SIGKILL`.
+/// On Windows, terminates the process immediately.
 pub fn kill_port_occupant(pid: u32, grace_period: Duration) -> Result<(), SysError> {
     platform::kill_port_occupant(pid, grace_period)
 }

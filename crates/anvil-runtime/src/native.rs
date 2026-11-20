@@ -49,7 +49,8 @@ impl<C: ProcessController + 'static> NativeProcessExecutor<C> {
     }
 }
 
-// A PID can be reused between wait() and registry cleanup.
+// A PID can be reused between child exit and registry cleanup. Only remove the
+// entry if it still points to the same process handle.
 async fn remove_handle(handles: &Handles, pid: u32, handle: &Arc<ManagedProcessHandle>) {
     let mut registry = handles.lock().await;
     if registry
@@ -367,7 +368,6 @@ mod tests {
     async fn stops_nested_process_and_reaps_root() {
         let root = tempfile::tempdir().unwrap();
         let cmd = if std::env::consts::OS == "windows" {
-            // Exercise a descendant started by a member of the Job Object.
             std::fs::write(root.path().join("worker.cmd"),
                 "@echo off\r\n:wait\r\nif not exist attached goto wait\r\npowershell -NoProfile -NonInteractive -Command \"Write-Output $PID; Start-Sleep 60\"\r\n",
             ).unwrap();

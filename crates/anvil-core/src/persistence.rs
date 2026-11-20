@@ -39,8 +39,7 @@ pub enum PersistenceError {
     Worker(#[source] tokio::task::JoinError),
 }
 
-/// Facts about one failed launch. The caller supplies a sanitized reason and the
-/// ordered sample obtained from the service's M4 log collector separately.
+/// Details of a failed service instance. Its log tail is supplied separately.
 #[derive(Serialize)]
 pub struct CrashInfo {
     /// Configured service ID.
@@ -115,9 +114,8 @@ impl WorkspacePersistence {
         })
     }
 
-    /// Drain one service's complete M4.2 stream into its append-only log, with one
-    /// timestamp (Unix nanoseconds), source and redacted body per line. Return the
-    /// path after the stream closes and all writes have been flushed and synced.
+    /// Appends each redacted log entry with its Unix timestamp in nanoseconds and source.
+    /// Returns the log path after the input closes and the writes are flushed and synced.
     pub async fn write_service_log(
         &self,
         service: &str,

@@ -442,7 +442,6 @@ mod tests {
             vec!["auth".to_owned(), "billing".to_owned()]
         );
 
-        // Step 1: db becomes healthy -> unlocks both auth and billing, not gateway.
         assert_eq!(
             scheduler.mark_healthy("db"),
             vec!["auth".to_owned(), "billing".to_owned()]
@@ -452,10 +451,8 @@ mod tests {
         assert!(scheduler.is_ready("billing"));
         assert!(!scheduler.is_ready("gateway"));
 
-        // Duplicate healthy event does not re-emit downstream services.
         assert!(scheduler.mark_healthy("db").is_empty());
 
-        // Step 2: only auth becomes healthy -> gateway MUST NOT unlock yet.
         assert!(scheduler.mark_healthy("auth").is_empty());
         assert!(!scheduler.is_ready("gateway"));
         assert_eq!(
@@ -463,7 +460,6 @@ mod tests {
             vec!["billing".to_owned()]
         );
 
-        // Step 3: billing also becomes healthy -> gateway unlocks immediately.
         assert_eq!(
             scheduler.mark_healthy("billing"),
             vec!["gateway".to_owned()]
@@ -471,7 +467,6 @@ mod tests {
         assert!(scheduler.is_ready("gateway"));
         assert!(scheduler.pending_dependencies("gateway").is_empty());
 
-        // Step 4: gateway becomes healthy -> no further downstream services.
         assert!(scheduler.mark_healthy("gateway").is_empty());
         assert!(scheduler.is_healthy("gateway"));
     }
@@ -506,7 +501,6 @@ mod tests {
         assert_eq!(scheduler.mark_healthy("auth"), vec!["gateway".to_owned()]);
         assert!(scheduler.is_ready("gateway"));
 
-        // Unknown service resets return empty without altering existing state.
         assert!(scheduler.reset_subtree("nonexistent").is_empty());
         assert!(scheduler.mark_healthy("nonexistent").is_empty());
     }

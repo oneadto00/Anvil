@@ -84,7 +84,7 @@ pub enum RuntimeConfig {
         /// Optional explicit container name (defaults to `anvil-<project>-<service>`).
         #[serde(default)]
         container_name: Option<String>,
-        /// Port bindings in `HOST:CONTAINER` format.
+        /// Port bindings such as `8080:80`, with optional host IP and protocol.
         #[serde(default)]
         ports: Vec<String>,
         /// Volume mount specifications.
@@ -191,25 +191,22 @@ impl AnvilConfig {
         Self::from_yaml_str(&raw)
     }
 
-    /// Validates all semantic rules from `PROTOCOL_ANVIL_YAML.md`, collecting all violations.
+    /// Validates the configuration and collects all semantic violations.
     pub fn validate(&self) -> Result<(), Vec<ConfigValidationError>> {
         let mut errors = Vec::new();
 
-        // 1. Protocol version check
         if self.version != SUPPORTED_VERSION {
             errors.push(ConfigValidationError::UnsupportedVersion(
                 self.version.clone(),
             ));
         }
 
-        // 2. Project name check
         if !is_valid_project_name(&self.project.name) {
             errors.push(ConfigValidationError::InvalidProjectName(
                 self.project.name.clone(),
             ));
         }
 
-        // 3. Non-empty services check
         if self.services.is_empty() {
             errors.push(ConfigValidationError::EmptyServices);
         }
@@ -217,11 +214,9 @@ impl AnvilConfig {
         let declared_secrets: BTreeSet<&str> = self.secrets.iter().map(String::as_str).collect();
         let mut seen_ports: BTreeMap<u16, String> = BTreeMap::new();
 
-        // 7 (global): Validate global env secret placeholders & declarations
         validate_env_secrets(None, &self.env, &declared_secrets, &mut errors);
 
         for (service_id, svc) in &self.services {
-            // 4. Port validity & uniqueness
             if let Some(port) = svc.port {
                 if port == 0 {
                     errors.push(ConfigValidationError::InvalidPort {
@@ -238,7 +233,6 @@ impl AnvilConfig {
                 }
             }
 
-            // 5. Dependency integrity
             for dep in &svc.depends_on {
                 if dep == service_id {
                     errors.push(ConfigValidationError::SelfDependency {
@@ -252,7 +246,6 @@ impl AnvilConfig {
                 }
             }
 
-            // 6. Command & probe validity
             if let RuntimeConfig::Native { cmd, .. } = &svc.runtime {
                 if cmd.trim().is_empty() {
                     errors.push(ConfigValidationError::EmptyCommand {
@@ -265,7 +258,6 @@ impl AnvilConfig {
                 validate_probe(service_id, probe, &mut errors);
             }
 
-            // 7 (service): Validate per-service env secret placeholders & declarations
             validate_env_secrets(
                 Some(service_id.as_str()),
                 &svc.env,

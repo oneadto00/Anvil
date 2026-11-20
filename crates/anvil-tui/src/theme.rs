@@ -1,4 +1,4 @@
-//! Semantic styles shared by future interface components.
+//! Terminal colors and styles for service states and workbench controls.
 
 use anvil_core::ServiceState;
 use ratatui::style::{Color, Modifier, Style};

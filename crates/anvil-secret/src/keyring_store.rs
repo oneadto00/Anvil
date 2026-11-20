@@ -21,12 +21,10 @@ struct KeyIndexFile {
     keys: BTreeSet<String>,
 }
 
-/// Secret backend backed by the operating system's native credential store via `keyring`.
+/// Stores secret values in the operating system's credential store.
 ///
-/// Because `keyring` does not natively support enumerating keys under a service name across all
-/// platforms, `KeyringStore` maintains a small key-name-only sidecar JSON index at
-/// `<index_dir>/<project>.keys.json` (defaulting to `~/.anvil/vault/<project>.keys.json`).
-/// Secret values themselves are never written to the sidecar file.
+/// To support listing across platforms, it keeps a separate index of key names at
+/// `<index_dir>/<project>.keys.json`. The default index directory is `~/.anvil/vault`.
 pub struct KeyringStore {
     index_dir: PathBuf,
     index_lock: Mutex<()>,
@@ -53,7 +51,6 @@ impl KeyringStore {
         Ok(self.index_dir.join(format!("{project}.keys.json")))
     }
 
-    /// Returns the `keyring` service name used for `project`.
     fn service_name(project: &str) -> String {
         format!("anvil:{project}")
     }

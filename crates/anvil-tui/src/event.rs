@@ -1,4 +1,4 @@
-//! Pure keyboard-to-intent routing; no terminal reads or engine commands occur here.
+//! Maps keyboard events to workbench actions.
 
 use anvil_core::{PortOccupant, ServiceId, ServiceState};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -43,7 +43,7 @@ pub enum ModalKind {
     },
 }
 
-/// Intent for a future state reducer; mapping a key never performs this action.
+/// Workbench action produced by keyboard input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TuiAction {
     /// Request graceful workspace shutdown.
@@ -64,7 +64,7 @@ pub enum TuiAction {
     ToggleFocus,
     /// Request a restart of the selected service.
     RestartSelected,
-    /// Request conflict resolution for the modal's service, not the current selection.
+    /// Request conflict resolution for the service named in the modal.
     KillPortConflict(ServiceId),
     /// Close the active modal.
     DismissModal,

@@ -225,7 +225,7 @@ fn docker_error(operation: &'static str, error: DockerError) -> RuntimeError {
     RuntimeError::DockerClient { operation, reason }
 }
 
-/// Parses a published port into its exposed-port key and host binding.
+// The exposed-port key uses the container port and protocol. The binding uses the host port and IP.
 fn parse_port_binding(spec: &str) -> Result<(String, PortBinding), RuntimeError> {
     let invalid = || RuntimeError::InvalidPortBinding(spec.to_owned());
     let (mapping, protocol) = spec.split_once('/').unwrap_or((spec, "tcp"));

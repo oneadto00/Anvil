@@ -58,7 +58,8 @@ pub trait RuntimeExecutor: Send + Sync {
         log_tx: mpsc::Sender<RawLogLine>,
     ) -> anyhow::Result<(RuntimeIdentity, oneshot::Receiver<ExitStatusEvent>)>;
 
-    /// Stops the instance and its descendants, allowing time for graceful shutdown.
+    /// Stops the instance using the backend's shutdown policy.
+    /// Backends that support graceful shutdown use `grace_period` before escalating.
     async fn stop(&self, identity: &RuntimeIdentity, grace_period: Duration) -> anyhow::Result<()>;
 
     /// Checks whether the identified instance is running.

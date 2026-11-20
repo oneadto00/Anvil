@@ -41,10 +41,10 @@ impl ProcessSpawnIdentity {
     }
 }
 
-/// Safe RAII handle representing ownership over an isolated OS process tree.
+/// Handle for an isolated OS process tree.
 ///
-/// On Unix this tracks the isolated process group ID (`pgid`); on Windows it holds
-/// an owned Win32 Job Object handle configured with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
+/// On Unix it tracks the process group ID. On Windows it owns a Job Object handle
+/// configured with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
 #[derive(Debug)]
 pub struct ManagedProcessHandle {
     pub(crate) inner: imp::PlatformProcessHandle,
@@ -97,14 +97,19 @@ pub trait ProcessController: Send + Sync {
         imp::attach_pid(pid)
     }
 
-    /// Terminates the process tree owned by `handle` using a graceful-then-forceful strategy.
+    /// Terminates the process tree tracked by `handle`.
+    ///
+    /// On Unix the group gets `grace_period` to exit after `SIGTERM`. On Windows
+    /// the job is terminated immediately.
     fn terminate_handle(
         &self,
         handle: &ManagedProcessHandle,
         grace_period: Duration,
     ) -> Result<(), SysError>;
 
-    /// Terminates a process tree identified by `(pid, pgid)` (for example during orphan recovery).
+    /// Terminates a recorded instance, for example during orphan recovery.
+    ///
+    /// On Unix this targets the process group. On Windows this targets the root PID.
     fn terminate_process_tree(
         &self,
         pid: u32,

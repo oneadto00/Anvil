@@ -1,5 +1,4 @@
-//! Runtime adapter bridging `anvil-core`'s `EngineExecutor` trait with
-//! `anvil-runtime` executors, `anvil-secret` resolution, and three-way log pipelines.
+//! Connects the orchestrator to runtime executors, secret resolution, and log routing.
 
 use anvil_core::{
     log_ring::{LogEntry, LogError, LogIngestor, LogInput, LogRing, LogSource},
@@ -181,7 +180,6 @@ impl HybridEngineExecutor {
         }
     }
 
-    /// Closes all bound UI batching pipes so `EngineChannels::logs` can drain and close.
     fn ui_pipe_for(&self, service_id: &str) -> Option<mpsc::Sender<LogInput>> {
         lock_unpoisoned(&self.ui_log_pipes).get(service_id).cloned()
     }
@@ -241,8 +239,7 @@ impl EngineExecutor for HybridEngineExecutor {
         let service_id = id.to_owned();
         let fallback_service_env = config.env.clone();
 
-        // Resolve `${SECRET:<KEY>}` placeholders just-in-time on a blocking thread so
-        // keyring IPC / Argon2id KDF never stalls the async reactor.
+        // Keyring IPC and Argon2id derivation can block the async executor.
         let resolved = tokio::task::spawn_blocking(move || {
             resolve_service_secrets(
                 &workspace_config,
@@ -353,7 +350,7 @@ impl EngineExecutor for HybridEngineExecutor {
     }
 }
 
-/// Losslessly converts a runtime [`ExitStatusEvent`] into [`anvil_core::InstanceExit`].
+/// Converts runtime exit details to the actor's per-instance event.
 pub fn map_exit_status(event: ExitStatusEvent) -> InstanceExit {
     match event {
         ExitStatusEvent::Exited { code, signal } => InstanceExit::Process { code, signal },
@@ -418,7 +415,7 @@ fn resolve_service_secrets(
         }
     }
 
-    // Sort longest-first so compound interpolated values are redacted before sub-parts if needed.
+    // Redact longer values first so overlapping fragments leave less context visible.
     sensitive.sort_by_key(|secret| std::cmp::Reverse(secret.len()));
     Ok(ResolvedServiceEnv {
         env: decrypted_env,
@@ -440,7 +437,7 @@ fn spawn_log_pipeline(
     let (drained_tx, drained_rx) = oneshot::channel();
     let (written_tx, written_rx) = oneshot::channel();
 
-    // Drain the per-launch local UI channel when UI batches flow via `ui_pipe`.
+    // The per-launch collector supplies persistence. The shared pipe handles UI delivery.
     tokio::spawn(async move {
         while dummy_ui_rx.recv().await.is_some() {}
     });

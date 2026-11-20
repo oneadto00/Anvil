@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 #![cfg(test)]
 
-//! Milestone 4 acceptance through the public actor and real log persistence.
+//! Integration tests for orchestration, log backpressure, and persistence.
 //! The runtime controls process events and redacts its synthetic credential at
 //! the adapter boundary. No native process or Docker daemon is used here.
 

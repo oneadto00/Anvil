@@ -25,7 +25,7 @@ pub enum SysError {
     /// Failed to probe local port availability via bind check.
     #[error("port bind check failed on port {port}: {reason}")]
     PortBindCheck {
-        /// TCP/UDP port number that could not be probed.
+        /// TCP port that could not be probed.
         port: u16,
         /// Underlying OS bind error description.
         reason: String,
@@ -40,7 +40,7 @@ pub enum SysError {
         reason: String,
     },
 
-    /// Runtime lockfile could not be parsed or failed fingerprint validation.
+    /// A runtime lockfile, record, or project identifier was invalid.
     #[error("invalid runtime lockfile: {0}")]
     InvalidLockfile(String),
 

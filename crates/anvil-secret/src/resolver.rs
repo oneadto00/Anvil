@@ -104,8 +104,7 @@ pub fn validate_secret_refs(value: &str) -> Result<Vec<String>, SecretError> {
 
 /// Resolves all `${SECRET:<KEY_NAME>}` placeholders in a single environment value using `backend`.
 ///
-/// Resolution is single-pass (non-recursive) so literal placeholder strings inside secret values
-/// are never re-expanded.
+/// Resolution expands only placeholders in the input. Secret values are inserted literally.
 pub fn resolve_value<S: SecretBackend + ?Sized>(
     project: &str,
     raw_value: &str,
@@ -325,7 +324,6 @@ mod tests {
             "postgres://nebula:pw_12345@127.0.0.1:5432/dev"
         );
         assert_eq!(resolved["JWT_SECRET"].as_str(), "jwt_abc");
-        // DB_PASSWORD appeared twice across raw env vars, so only 2 distinct backend gets occurred.
         assert_eq!(backend.get_calls.load(Ordering::SeqCst), 2);
 
         let wrapper = ResolvedEnvMap::from(resolved);

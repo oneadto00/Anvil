@@ -514,7 +514,6 @@ mod tests {
             project: Some("demo".to_owned()),
         };
 
-        // Single-service exact tail (-n 3).
         let (_tx, rx) = watch::channel(true);
         let mut single_sink = CollectSink::default();
         run_logs_with_sink(
@@ -532,7 +531,6 @@ mod tests {
         assert!(single_sink.lines[2].contains("api-line-300"));
         assert!(!single_sink.lines[0].starts_with("[api]"));
 
-        // Multi-service aggregation (-n 2) with [service] prefixes sorted by timestamp.
         let (_tx2, rx2) = watch::channel(true);
         let mut multi_sink = CollectSink::default();
         run_logs_with_sink(&globals, None, false, 2, rx2, &mut multi_sink).await?;
@@ -574,7 +572,6 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("missing initial tailed line"))?;
         assert_eq!(first, "initial-2");
 
-        // Append a line incrementally.
         let path_append = api_log.clone();
         tokio::task::spawn_blocking(move || -> io::Result<()> {
             let mut file = fs::OpenOptions::new().append(true).open(path_append)?;

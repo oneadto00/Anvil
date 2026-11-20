@@ -90,7 +90,6 @@ pub(crate) fn terminate_process_tree(
 
     let target_pgid = Pid::from_raw(target_i32);
 
-    // Phase 1: Graceful shutdown via SIGTERM to the entire process group.
     match killpg(target_pgid, Signal::SIGTERM) {
         Ok(()) => {}
         Err(Errno::ESRCH) => return Ok(()),
@@ -140,7 +139,6 @@ pub(crate) fn terminate_process_tree(
         thread::sleep(sleep_for);
     }
 
-    // Phase 2: Grace period expired; escalate to SIGKILL across the process group.
     match killpg(target_pgid, Signal::SIGKILL) {
         Ok(()) | Err(Errno::ESRCH) => Ok(()),
         Err(Errno::EPERM) if !has_live_process_in_group(target_pgid, pid) => Ok(()),

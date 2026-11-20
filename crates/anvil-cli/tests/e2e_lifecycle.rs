@@ -246,7 +246,6 @@ services:
     );
     fs::write(&config_path, yaml)?;
 
-    // 1. Write DB_PASS via `anvil secret set --vault --stdin`.
     let secret_value = "s3cr3t_e2e_db_password_987";
     let mut set_child = anvil_cmd(&config_path, &data_dir)
         .args(["secret", "set", "DB_PASS", "--vault", "--stdin"])
@@ -267,7 +266,6 @@ services:
     let set_stdout = String::from_utf8_lossy(&set_out.stdout);
     assert!(!set_stdout.contains(secret_value));
 
-    // 2. Run `anvil doctor` and verify all non-Docker checks [PASS] without [FAIL].
     let doctor_out = anvil_cmd(&config_path, &data_dir).arg("doctor").output()?;
     let doctor_stdout = String::from_utf8_lossy(&doctor_out.stdout);
     assert!(
@@ -283,7 +281,7 @@ services:
     assert!(!doctor_stdout.contains("[FAIL]"));
     assert!(!doctor_stdout.contains(secret_value));
 
-    // 3. Launch `anvil up --no-tui` in an isolated process group.
+    // Use a separate process group so teardown targets only this invocation.
     let controller = DefaultProcessController::new();
     let mut up_cmd = anvil_cmd(&config_path, &data_dir);
     up_cmd
@@ -298,12 +296,11 @@ services:
         pid_pgid: Some((up_identity.pid, up_identity.pgid)),
     };
 
-    // Wait for all 3 topological waves to launch and reach the leaf (`web`).
     let db_pid = wait_for_pid_file(&db_pid_file, Duration::from_secs(12))?;
     let api_pid = wait_for_pid_file(&api_pid_file, Duration::from_secs(12))?;
     let web_pid = wait_for_pid_file(&web_pid_file, Duration::from_secs(12))?;
 
-    // Wait briefly until `web` is healthy in `anvil ps --json`.
+    // PID files confirm startup. Poll `ps` for the persisted runtime records.
     let ps_deadline = Instant::now() + Duration::from_secs(10);
     let mut all_running = false;
     let mut last_ps = String::new();
@@ -333,17 +330,14 @@ services:
         "expected all 3 services Running in `ps --json`, got:\n{last_ps}"
     );
 
-    // Verify strict topological startup order: db -> api -> web.
     let events: Vec<String> = fs::read_to_string(&events_file)?
         .lines()
         .map(str::to_owned)
         .collect();
     assert_eq!(events, vec!["db_start", "api_start", "web_start"]);
 
-    // Verify real secret injection in child environment.
     assert_eq!(fs::read_to_string(&api_env_file)?.trim(), secret_value);
 
-    // Verify persisted log file + `anvil logs api` redact the secret cleanly.
     let api_log_path = data_dir.join("logs/e2e-lifecycle/api.log");
     let log_deadline = Instant::now() + Duration::from_secs(5);
     let mut api_log = String::new();
@@ -374,7 +368,6 @@ services:
     assert!(logs_stdout.contains("[REDACTED]"));
     assert!(!logs_stdout.contains(secret_value));
 
-    // 4. Send graceful termination signal to `anvil up --no-tui` process group and verify clean teardown.
     controller.terminate_process_tree(up_identity.pid, up_identity.pgid, Duration::from_secs(5))?;
     up_guard.pid_pgid = None;
     let status = up_child.wait()?;

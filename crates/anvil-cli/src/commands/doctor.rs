@@ -74,7 +74,7 @@ enum ConfigLoadOutcome {
     Failed(Box<Option<AnvilConfig>>, CoreError),
 }
 
-/// Executes all 5 `anvil doctor` checks and returns an error if any check reports `[FAIL]`.
+/// Runs `anvil doctor` and returns an error if any check reports `[FAIL]`.
 pub async fn run(globals: &GlobalOptions, reap: bool) -> anyhow::Result<()> {
     let mut stdout = io::stdout().lock();
     run_with(globals, reap, None, DockerCheckMode::Live, &mut stdout).await
@@ -89,7 +89,6 @@ async fn run_with(
 ) -> anyhow::Result<()> {
     let mut outcomes = Vec::with_capacity(5);
 
-    // 1. Config & DAG cycle validation
     let (config_outcome, config) = check_config_and_dag(&globals.config).await?;
     outcomes.push(config_outcome);
 
@@ -102,7 +101,6 @@ async fn run_with(
     let vault_dir = secret::vault_dir_for(&data_dir);
     let run_dir = data_dir.join("run");
 
-    // 2. Declared secret completeness check
     let secrets_outcome = match (&config, &project) {
         (Some(cfg), Some(proj)) => {
             check_secrets(proj, &cfg.secrets, &vault_dir, passphrase_override).await
@@ -114,7 +112,6 @@ async fn run_with(
     };
     outcomes.push(secrets_outcome);
 
-    // 3. Orphan lockfile & process fingerprint check
     let lock_outcome = match &project {
         Some(proj) => check_lockfile(proj, &run_dir, reap).await,
         None => CheckOutcome::single(
@@ -124,7 +121,6 @@ async fn run_with(
     };
     outcomes.push(lock_outcome);
 
-    // 4. Service listening port conflict preflight
     let ports_outcome = match &config {
         Some(cfg) => check_ports(&cfg.services).await,
         None => CheckOutcome::single(
@@ -134,7 +130,6 @@ async fn run_with(
     };
     outcomes.push(ports_outcome);
 
-    // 5. Docker Daemon connectivity check
     let uses_docker = config.as_ref().is_some_and(|cfg| {
         cfg.services.values().any(|svc| {
             matches!(

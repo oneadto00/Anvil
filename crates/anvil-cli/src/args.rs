@@ -36,7 +36,7 @@ pub struct Cli {
 
 /// Shared global options resolved from top-level CLI flags.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)] // Fields are consumed by Phase 2 subcommand implementations.
+#[allow(dead_code)]
 pub struct GlobalOptions {
     /// Path to the `anvil.yaml` configuration file.
     pub config: PathBuf,
@@ -115,7 +115,7 @@ pub enum Command {
 
 /// Subcommands under `anvil secret`.
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
-#[allow(dead_code)] // Fields are consumed by Phase 2 secret subcommand handler.
+#[allow(dead_code)]
 pub enum SecretCommand {
     /// Store or update a secret value for the specified key.
     Set {
